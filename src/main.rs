@@ -66,7 +66,7 @@ enum MyPostErr {
 }
 
 async fn my_post(body: serde_json::Value) -> Result<Vec<String>, MyPostErr> {
-    let r_body = reqwest::Client::new()
+    Ok(reqwest::Client::new()
         .post("https://jwgl.njtech.edu.cn/cdjy/cdjy_cxKxcdlb.html?doType=query&gnmkdm=N2155")
         .headers({
             let mut cookie = HeaderMap::new();
@@ -98,24 +98,25 @@ async fn my_post(body: serde_json::Value) -> Result<Vec<String>, MyPostErr> {
         // Response
         .json::<serde_json::Value>()
         .await
-        .map_err(|err| MyPostErr::ParseBodyError(err.to_string()))?;
-    let v = r_body
+        .map_err(|err| MyPostErr::ParseBodyError(err.to_string()))?
         // Body
         .get("items")
         .ok_or(MyPostErr::NoItemsError(String::from("NoItemsError")))?
         .as_array()
-        .ok_or(MyPostErr::NoCdmcError(String::from("NoCdmcError")))?;
-    let mut r = Vec::new();
-    for item in v {
-        r.push(
-            item
-                // .ok_or(MyPostErr::NoCdmcError(String::from("NoCdmcError")))?
+        .ok_or(MyPostErr::NoCdmcError(String::from("NoCdmcError")))?
+        // Items
+        .iter()
+        .map(|item| -> Result<String, MyPostErr> {
+            Ok(item
                 .get("cdmc")
                 .ok_or(MyPostErr::NoCdmcError(String::from("NoCdmcError")))?
                 .as_str()
                 .ok_or(MyPostErr::NoCdmcError(String::from("NoCdmcError")))?
-                .to_string()
-        );
-    }
-    Ok(r)
+                .to_string())
+        })
+        .collect::<Vec<Result<String, MyPostErr>>>()
+        .iter()
+        .filter(|item| item.is_ok())
+        .map(|item| item.as_ref().unwrap().clone())
+        .collect::<Vec<String>>())
 }
