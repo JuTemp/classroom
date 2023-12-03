@@ -1,11 +1,8 @@
+use std::vec;
+
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde_json::json;
-
-#[derive(Deserialize, Debug)]
-struct Cdmc {
-    cdmc: String,
-}
 
 #[tokio::main]
 async fn main() {
@@ -29,18 +26,36 @@ async fn main() {
     //     "queryModel.sortOrder": "asc",
     //     "time": "1",
     // }"#;
-    let s_body: serde_json::Value = json!({
+
+    match my_post(
+        make_params("01", vec![13], vec![7], vec![5,6,7,8,9,10]),
+        "1A3F6F45A1D5924C7D18B63EF00182E7",
+    )
+    .await
+    {
+        Ok(v) => println!("{:?}", v),
+        Err(e) => println!("{:?}", e),
+    };
+}
+
+fn make_params(
+    building: &str,
+    week: Vec<u32>,
+    day: Vec<u32>,
+    class: Vec<u32>,
+) -> serde_json::Value {
+    json!({
         "fwzt": "cx",
         "xqh_id": "1",
         "xnm": "2023",
         "xqm": "3",
-        "lh": "01",
+        "lh": building,
         "jyfs": "0",
         "cdj": "",
         "sfb": "",
-        "zcd": "8192",
-        "xqj": "6",
-        "jcd": "3",
+        "zcd": week.iter().map(|w| 2_i32.pow(w-1)).sum::<i32>().to_string(),
+        "xqj": day.iter().map(|d| d.to_string()).collect::<Vec<String>>().join(","),
+        "jcd": class.iter().map(|w| 2_i32.pow(w-1)).sum::<i32>().to_string(),
         "_search": "false",
         "nd": "1701526629985",
         "queryModel.showCount": "50",
@@ -48,12 +63,7 @@ async fn main() {
         "queryModel.sortName": "cdmc",
         "queryModel.sortOrder": "asc",
         "time": "1"
-    });
-
-    match my_post(s_body).await {
-        Ok(v) => println!("{:?}", v),
-        Err(e) => println!("{:?}", e),
-    };
+    })
 }
 
 #[derive(Deserialize, Debug)]
@@ -65,8 +75,8 @@ enum MyPostErr {
     NoCdmcError(String),
 }
 
-async fn my_post(body: serde_json::Value) -> Result<Vec<String>, MyPostErr> {
-    Ok(reqwest::Client::new()
+async fn my_post(body: serde_json::Value, cookie_jsessionid: &str) -> Result<Vec<String>, MyPostErr> {
+    reqwest::Client::new()
         .post("https://jwgl.njtech.edu.cn/cdjy/cdjy_cxKxcdlb.html?doType=query&gnmkdm=N2155")
         .headers({
             let mut cookie = HeaderMap::new();
@@ -78,7 +88,7 @@ async fn my_post(body: serde_json::Value) -> Result<Vec<String>, MyPostErr> {
             );
             cookie.insert(
                 header::COOKIE,
-                "JSESSIONID=1A3F6F45A1D5924C7D18B63EF00182E7"
+                format!("JSESSIONID={}", cookie_jsessionid)
                     .parse::<HeaderValue>()
                     .unwrap(),
             );
@@ -114,9 +124,5 @@ async fn my_post(body: serde_json::Value) -> Result<Vec<String>, MyPostErr> {
                 .ok_or(MyPostErr::NoCdmcError(String::from("NoCdmcError")))?
                 .to_string())
         })
-        .collect::<Vec<Result<String, MyPostErr>>>()
-        .iter()
-        .filter(|item| item.is_ok())
-        .map(|item| item.as_ref().unwrap().clone())
-        .collect::<Vec<String>>())
+        .collect::<Result<Vec<String>, MyPostErr>>()
 }
